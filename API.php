@@ -1,9 +1,13 @@
 <?php
+/**
+ * Copyright (c) 2019 Rajkumar S
+ */
 
 require 'simple_html_dom.php';
 require 'vendor/autoload.php';
 
 use GuzzleHttp\Client;
+
 
 class API
 {
@@ -16,22 +20,58 @@ class API
         $this->client = new Client(['base_uri' => $this->domain]);
     }
 
-    public function fireUp($query)
+    public function init($move, $query = null, $docType = null, $field = null)
     {
         $response = $this->client->get($this->domain . '/cgi-bin/lsbrows1.cgi?Database_no_opt=++++');
         $html = str_get_html($response->getBody());
-        $form = $html->find('form[name=form_s]');
-        $user_name = $form[0]->find('input[name=user_name]')[0]->value;
-        return $this->search($form[0]->action, $user_name, $query);
+        switch ($move) {
+            case 'mappings' :
+            {
+                return $this->getQueryMappings($html);
+            }
+            case 'search' :
+            {
+                $form = $html->find('form[name=form_s]');
+                $user_name = $form[0]->find('input[name=user_name]')[0]->value;
+                return $this->search($form[0]->action, $user_name, $query, $docType, $field);
+            }
+            default : return [
+                'error' => 'Invalid move'
+            ];
+        }
     }
 
-    private function search($action, $user_name, $query)
+    private function getQueryMappings($html)
+    {
+        $docTypes = $html->find('select[name=Docu_type]')[0]->find('option');
+        $fields = $html->find('select[name=FIELD]')[0]->find('option');
+        $res = [
+            'docTypes' => [],
+            'fields' => []
+        ];
+        foreach ($docTypes as $docType) {
+            array_push($res['docTypes'],[
+                'id' => $docType->value,
+                'text' => trim($docType->plaintext)
+            ]);
+        }
+        foreach ($fields as $field) {
+            array_push($res['fields'],[
+                'id' => $field->value,
+                'text' => trim($field->plaintext)
+            ]);
+        }
+        return json_encode($res);
+
+    }
+
+    private function search($action, $user_name, $query, $docType, $field)
     {
         $response = $this->client->request('POST', $action, [
             'form_params' => [
                 'user_name' => $user_name,
-                'Docu_type' => '0',
-                'FIELD' => '3',
+                'Docu_type' => $docType,
+                'FIELD' => $field,
                 'T' => $query,
                 'OPTION' => '2',
                 'ch_period' => '0',
@@ -44,14 +84,15 @@ class API
         $results = [
             'action' => $form->action,
             'user_name' => $input->value,
+            'data' => []
         ];
         foreach ($form->find('a') as $item) {
-            array_push($results, [
-                'id' => (int) filter_var($item->onclick, FILTER_SANITIZE_NUMBER_INT),
+            array_push($results['data'], [
+                'id' => (int)filter_var($item->onclick, FILTER_SANITIZE_NUMBER_INT),
                 'title' => html_entity_decode($item->plaintext),
             ]);
         }
-        return $results;
+        return json_encode($results);
     }
 
     public function getBookDetails($action, $user_name, $id)
@@ -78,7 +119,7 @@ class API
             } else if ($item->size == 3 && $item->color == 'green') {
                 if (!empty($currKey)) {
                     if (array_key_exists($currKey, $res)) {
-                        $res[$currKey] = $res[$currKey] . ', ' . $temp;
+                        $res[$currKey] = $res[$currKey] . ' ' . $temp;
                     } else {
                         $res[$currKey] = $temp;
                     }
