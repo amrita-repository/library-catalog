@@ -35,6 +35,11 @@ class API
                 $user_name = $form[0]->find('input[name=user_name]')[0]->value;
                 return $this->search($form[0]->action, $user_name, $query, $docType, $field);
             }
+            case 'checkouts':{
+                $form = $html->find('form[action=http://172.17.9.22/cgi-bin/lsbrows4.cgi]');
+                $user_name = $form[0]->find('input[name=user_name]')[0]->value;
+                return $this->getCheckouts($user_name,$query,$docType);
+            }
             default : return [
                 'error' => 'Invalid move'
             ];
@@ -133,5 +138,53 @@ class API
         $b = array_map('trim', $res);
         $res = array_combine($a, $b);
         return json_encode($res);
+    }
+
+    public function getCheckouts($username,$memberid,$password){
+        $response = $this->client->request('POST',$this->domain.'/cgi-bin/lsbrows4.cgi',[
+            'form_params'=>[
+                'user_name'=>$username
+            ]
+        ]);
+        $html = str_get_html($response->getBody());
+        $form = $html->find('form[name=barcodecheck]');
+        $user_name = $form[0]->find('input[name=user_name]')[0]->value;
+        $response = $this->client->request('POST',$form[0]->action,[
+            'form_params'=>[
+                'user_name'=>$user_name,
+                'ID1'=>$memberid,
+                'PASS1'=>$password
+            ]
+        ]);
+        $html = str_get_html($response->getBody());
+        $name = $html->find('td[width=335]')[0]->plaintext;
+        $checkouts = $html->find('td[width=30]')[0]->plaintext;
+        $lastChecked = $html->find('td[width=50]')[1]->plaintext;
+        $fineDue = $html->find('td[width=45]')[0]->plaintext;
+        $form = $html->find('form[action=http://172.17.9.22/cgi-bin/lsbrows4.cgi]');
+        $user_name = $form[0]->find('input[name=user_name]')[0]->value;
+        $response = $this->client->request('POST',$form[0]->action,[
+            'form_params'=>[
+                'user_name'=>$user_name
+            ]
+        ]);
+        $html = str_get_html($response->getBody());
+        $select = $html->find('select[name="LIST_DISP]');
+        $items = [];
+        if(sizeof($select) > 0)
+            foreach ($select[0]->find('option') as $key=>$item) {
+                if(!$key==0){
+                    $item = str_replace("&nbsp;"," ",$item->plaintext);
+                    array_push($items,$item);
+                }
+            }
+        $output = [
+            'name' => trim($name),
+            'checkouts'=> trim($checkouts),
+            'last_checked'=>trim($lastChecked),
+            'fine_due'=>trim($fineDue),
+            'items'=>$items
+        ];
+        return json_encode($output);
     }
 }

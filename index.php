@@ -25,4 +25,8 @@ Flight::route('POST /get-book-details', function () use ($api) {
     echo $api->getBookDetails($_POST['action'], $_POST['user_name'], $_POST['id']);
 });
 
+Flight::route('POST /checkouts',function () use ($api){
+    echo $api->init('checkouts', $_POST['memberid'],$_POST['password']);
+});
+
 Flight::start();
